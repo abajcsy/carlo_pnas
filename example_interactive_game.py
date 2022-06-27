@@ -79,8 +79,8 @@ controller = KeyboardController(w)
 
 for k in range(T):
     # human-driven car controls come from keyboard
-    # c1.set_control(controller.steering, controller.throttle)
-    c1.set_control(u1_traj[0,k], u1_traj[1,k]) 
+    c1.set_control(controller.steering, controller.throttle)
+    # c1.set_control(u1_traj[0,k], u1_traj[1,k]) 
 
     # robot controls are something random right now
     c2.set_control(u2_traj[0,k], u2_traj[1,k]) 
