@@ -40,6 +40,8 @@ def OLNE_2player_solver(A,B1,B2,Q1,Q2,R1,R2,T,x0):
 
 def OLNE_quadratic_affine_cost_2player_solver(A,B1,B2,Q1,Q2,R1,R2,T,x0,q1,q2):
     # consider the cost: 1/2 x'Qx + q'x + 1/2 u'Ru
+    # Sample codes: OLNE_quadratic_affine_cost_2player_solver(np.eye(2), np.ones((2,1)), np.ones((2,1)), np.eye(2), np.eye(2), ...
+    # np.eye(1), np.eye(1), 4, np.ones((2,1)), np.ones((2,1)), np.ones((2,1)))
     
     n = len(x0)
     m1 = B1.shape[1]
