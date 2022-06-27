@@ -22,10 +22,9 @@ class Pedestrian(CircleEntity):
         self.collidable = True
 
 class PointAgent(CircleEntity):
-    def __init__(self, center: Point, heading: float, color: str = 'red'): # after careful consideration, I decided my color is the same as a salmon, so here we go.
-        radius = 1.5
+    def __init__(self, center: Point, heading: float, color: str = 'red', radius = 1.5): # after careful consideration, I decided my color is the same as a salmon, so here we go.
         movable = True
-        friction = 0.2
+        friction = 0.
         super(PointAgent, self).__init__(center, heading, radius, movable, friction)
         self.color = color
         self.collidable = True
