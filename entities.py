@@ -47,6 +47,7 @@ class Entity:
             speed = self.speed
             heading = self.heading
         
+            '''
             # Kinematic bicycle model dynamics based on
             # "Kinematic and Dynamic Vehicle Models for Autonomous Driving Control Design" by
             # Jason Kong, Mark Pfeiffer, Georg Schildbach, Francesco Borrelli
@@ -61,6 +62,7 @@ class Entity:
             angle = (heading + new_heading)/2. + beta
             new_center = self.center + (speed + new_speed)*Point(np.cos(angle), np.sin(angle))*dt / 2.
             new_velocity = Point(new_speed * np.cos(new_heading), new_speed * np.sin(new_heading))
+            '''
             
             '''
             # Point-mass dynamics based on
@@ -80,6 +82,14 @@ class Entity:
             
             '''
             
+            # Two connected double integrator dynamics. LTI system. 
+            inertia = 0.9
+            new_center = self.center + self.velocity*dt
+            new_heading = self.heading
+            new_velocity = inertia * self.velocity + Point(-self.inputSteering, self.inputAcceleration)
+            new_acceleration = self.inputAcceleration - self.friction * speed
+            new_angular_velocity = 0.
+
             self.center = new_center
             self.heading = np.mod(new_heading, 2*np.pi) # wrap the heading angle between 0 and +2pi
             self.velocity = new_velocity
