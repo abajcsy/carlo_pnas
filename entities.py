@@ -46,6 +46,23 @@ class Entity:
         if self.movable:
             speed = self.speed
             heading = self.heading
+
+            # Two connected double integrator dynamics. LTI system. 
+            # We map:
+            #   inputSteering     -->     accel_x
+            #   inputAcceleration -->     accel_y
+            inertia = 0.0 # 0.9
+            new_center = self.center + self.velocity*dt
+            new_heading = self.heading
+            new_velocity = inertia * self.velocity + Point(-self.inputSteering, self.inputAcceleration)
+            new_acceleration = 0. #self.inputAcceleration - self.friction * speed
+            new_angular_velocity = 0.
+
+            self.center = new_center
+            self.heading = np.mod(new_heading, 2*np.pi) # wrap the heading angle between 0 and +2pi
+            self.velocity = new_velocity 
+            self.acceleration = new_acceleration
+            self.angular_velocity = new_angular_velocity
         
             '''
             # Kinematic bicycle model dynamics based on
@@ -81,20 +98,6 @@ class Entity:
             new_center = self.center + (self.velocity + new_velocity) * dt / 2.
             
             '''
-            
-            # Two connected double integrator dynamics. LTI system. 
-            inertia = 0.9
-            new_center = self.center + self.velocity*dt
-            new_heading = self.heading
-            new_velocity = inertia * self.velocity + Point(-self.inputSteering, self.inputAcceleration)
-            new_acceleration = self.inputAcceleration - self.friction * speed
-            new_angular_velocity = 0.
-
-            self.center = new_center
-            self.heading = np.mod(new_heading, 2*np.pi) # wrap the heading angle between 0 and +2pi
-            self.velocity = new_velocity
-            self.acceleration = new_acceleration
-            self.angular_velocity = new_angular_velocity
             
             self.buildGeometry()
     

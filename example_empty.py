@@ -1,6 +1,6 @@
 import numpy as np
 from world import World
-from agents import Car, RingBuilding, CircleBuilding, Painting, Pedestrian
+from agents import Car, RingBuilding, CircleBuilding, Painting, Pedestrian, PointAgent
 from geometry import Point
 import time
 from tkinter import *
@@ -26,17 +26,41 @@ for lane_no in range(num_lanes - 1):
         dy = lane_markers_radius * np.sin(theta)
         w.add(Painting(Point(world_width/2 + dx, world_height/2 + dy), Point(lane_marker_width, lane_marker_height), 'white', heading = theta))
 
-# A Car object is a dynamic object -- it can move. We construct it using its center location and heading angle.
-c1 = Car(Point(91.75,60), np.pi/2)
-c1.max_speed = 30.0 # let's say the maximum is 30 m/s (108 km/h)
-c1.velocity = Point(0, 3.0)
+# # A Car object is a dynamic object -- it can move. We construct it using its center location and heading angle.
+# c1 = Car(Point(91.75,60), np.pi/2)
+# c1.max_speed = 30.0 # let's say the maximum is 30 m/s (108 km/h)
+# c1.velocity = Point(0, 3.0)
+# w.add(c1)
+
+# # A Car object is a dynamic object -- it can move. We construct it using its center location and heading angle.
+# c2 = Car(Point(world_width/2.,60), np.pi/2, color='blue')
+# c2.max_speed = 30.0 # let's say the maximum is 30 m/s (108 km/h)
+# c2.velocity = Point(0, 3.0)
+# w.add(c2)
+
+# A PointAgent object is a dynamic object -- it can move. We construct it using its center location and heading angle (heading is unused).
+xinitA = [90, 60, 0., 0.]                        # xinit = [px, py, vx, vy]
+c1 = PointAgent(Point(xinitA[0],xinitA[1]), np.pi/2)
+c1.max_speed = 30.0                                 # let's say the maximum is 30 m/s (108 km/h)
+c1.velocity = Point(xinitA[2], xinitA[3])
 w.add(c1)
 
-# A Car object is a dynamic object -- it can move. We construct it using its center location and heading angle.
-c2 = Car(Point(world_width/2.,60), np.pi/2, color='blue')
+# Construct the second agent
+xinitB = [50., 100, 0, 0.0]
+c2 = PointAgent(Point(xinitB[0],xinitB[1]), np.pi/2, color='blue')
 c2.max_speed = 30.0 # let's say the maximum is 30 m/s (108 km/h)
-c2.velocity = Point(0, 3.0)
+c2.velocity = Point(xinitB[2], xinitB[3])
 w.add(c2)
+
+# Plan for the second agent! Setup goals for each agent
+gA = [10., 60.] 
+gB = [50., 10.]
+
+# This is just for visualization! We visualize the two agent's goals here. 
+goalAvis = PointAgent(Point(gA[0],gA[1]), np.pi/2, color='red', radius=0.8)
+goalBvis = PointAgent(Point(gB[0],gB[1]), np.pi/2, color='blue', radius=0.8)
+w.add(goalAvis)
+w.add(goalBvis)
 
 w.render() # This visualizes the world we just constructed.
 
@@ -50,7 +74,7 @@ for k in range(600):
     c1.set_control(controller.steering, controller.throttle)
 
     # robot controls are something random right now
-    c2.set_control(np.random.rand(), np.random.rand()) 
+    # c2.set_control(np.random.rand(), np.random.rand()) 
 
     w.tick() # This ticks the world for one time step (dt second)
     w.render()

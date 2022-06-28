@@ -1,4 +1,4 @@
-from agents import Car, Pedestrian, RectangleBuilding
+from agents import Car, Pedestrian, RectangleBuilding, PointAgent
 from entities import Entity
 from typing import Union
 from visualizer import Visualizer

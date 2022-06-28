@@ -9,7 +9,7 @@ from fb_ne_solver import FBNE_2player_solver
 
 import matplotlib.pyplot as plt
 
-dt = 0.1 # time steps in terms of seconds. In other words, 1/dt is the FPS.
+dt = 1 # time steps in terms of seconds. In other words, 1/dt is the FPS.
 world_width = 120 # in meters
 world_height = 120
 
@@ -17,7 +17,7 @@ world_height = 120
 w = World(dt, width = world_width, height = world_height, ppm = 6) 
 
 # A PointAgent object is a dynamic object -- it can move. We construct it using its center location and heading angle (heading is unused).
-xinitA = [90, 60, 0., 0.]                        # xinit = [px, py, vx, vy]
+xinitA = [100, 50, 0., 0.]                        # xinit = [px, py, vx, vy]
 c1 = PointAgent(Point(xinitA[0],xinitA[1]), np.pi/2)
 c1.max_speed = 30.0                                 # let's say the maximum is 30 m/s (108 km/h)
 c1.velocity = Point(xinitA[2], xinitA[3])
@@ -40,9 +40,9 @@ goalBvis = PointAgent(Point(gB[0],gB[1]), np.pi/2, color='blue', radius=0.8)
 w.add(goalAvis)
 w.add(goalBvis)
 
-a33 = 0.9; a44 = 0.9 # set the inertia value
-b33 = 0.9; b44 = 0.9
-c = 10.     # scale penalty on Q, q
+a33 = 0.0; a44 = 0.0 # set the inertia value
+b33 = 0.0; b44 = 0.0
+c = 1.     # scale penalty on Q, q
 d = 100.    # scale penalty on R
 A = np.array([[1, 0, 1, 0, 0, 0, 0, 0], 
                 [0, 1, 0, 1, 0, 0, 0, 0], 
@@ -58,17 +58,23 @@ B1[2,0] = 1.; B1[3,1] = 1.
 B2[6,0] = 1.; B2[7,1] = 1.
 Q1 = c*np.eye(8)
 Q2 = c*np.eye(8)
-q1 = c*np.array([-2.*gA[0], -2.*gA[1], 0, 0, -2.*gB[0], -2.*gB[1], 0, 0]).reshape(-1,1)
-q2 = c*np.array([-2.*gA[0], -2.*gA[1], 0, 0, -2.*gB[0], -2.*gB[1], 0, 0]).reshape(-1,1)
 R1 = d*np.eye(2)
 R2 = d*np.eye(2)
+xg = np.array(gA + [0,0] + gB + [0,0]).reshape(-1,1)
 x0 = np.array(xinitA + xinitB).reshape(-1,1)
 T = 50
 
 # Solve a two-player game to plan for agent 2.
-# x_traj, u1_traj, u2_traj, J1, J2 = OLNE_2player_solver(A,B1,B2,Q1,Q2,R1,R2,T,x0)
-# x_traj, u1_traj, u2_traj, J1, J2 = FBNE_2player_solver(A,B1,B2,Q1,Q2,R1,R2,T,x0)
-x_traj, u1_traj, u2_traj, J1, J2 = OLNE_quadratic_affine_cost_2player_solver(A,B1,B2,Q1,Q2,R1,R2,T,x0,q1,q2)
+info_pattern = "FB"
+
+if info_pattern == "OL":
+    x_traj, u1_traj, u2_traj, J1, J2 = OLNE_2player_solver(A,B1,B2,Q1,Q2,R1,R2,T,x0-xg)
+elif info_pattern == "FB":
+    x_traj, u1_traj, u2_traj, J1, J2 = FBNE_2player_solver(A,B1,B2,Q1,Q2,R1,R2,T,x0-xg)
+else:
+    print('This type of information pattern is not implemented!')
+    import sys
+    sys.exit(0)
 
 print('J1: ' + str(J1))
 print('J2: ' + str(J2))
@@ -79,12 +85,12 @@ print('agent A y-traj: ' + str(x_traj[1,:]))
 plt.figure(0)
 plt.plot(xinitA[0], xinitA[1], 'ro')
 plt.plot(xinitB[0], xinitB[1], 'bo')
-plt.plot(x_traj[0,:], x_traj[1,:], 'r-o')
-plt.plot(x_traj[4,:], x_traj[5,:], 'b-o')
+plt.plot(x_traj[0,:]+gA[0], x_traj[1,:]+gA[1], 'r-o')
+plt.plot(x_traj[4,:]+gB[0], x_traj[5,:]+gB[1], 'b-o')
 plt.plot(gA[0], gA[1], 'ro')
 plt.plot(gB[0], gB[1], 'bo')
 plt.axis([0, world_width, 0, world_height])
-plt.title('LQGames planned state trajectories')
+plt.title(info_pattern + ' LQGames planned state trajectories')
 plt.show()
 
 # Plot the control profile of agent 1
@@ -123,7 +129,7 @@ for k in range(T):
 
     w.tick() # This ticks the world for one time step (dt second)
     w.render()
-    time.sleep(dt/1) # if we do dt/4, then let's watch it 4x
+    time.sleep(dt) # if we do dt/4, then let's watch it 4x
     # if w.collision_exists():
     #     import sys
     #     sys.exit(0)
