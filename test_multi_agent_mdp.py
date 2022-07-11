@@ -29,17 +29,19 @@ xA, yA, xB, yB = mdp.state_to_coor(s)
 
 print('multi-dimensional coor: ', xA, yA, xB, yB)
 
+x0 = startA+startB
+
 # visualize the initial setup
-mdp.vis(startA[0], startA[1], startB[0], startB[1])
+mdp.vis(x0)
 
 # forward simulate each agent taking and action, and print the reward. 
 aA = 1
 aB = 2
-r = mdp.get_rewardA(startA+startB, aA, aB)
+r = mdp.get_rewardA(x0, aA, aB)
 
 print('reward after each agent takes their action: ', r)
 
-xprime, _ = mdp.transition_helper(startA+startB, aA, aB)
+xprime, _ = mdp.transition_helper(x0, aA, aB)
 
 mdp.vis(xprime)
 
@@ -48,3 +50,12 @@ hor = 3
 action_sequences = mdp.get_all_action_seq(hor)
 print('all action sequences: ', action_sequences)
 print('# of all action sequences: ', len(action_sequences))
+
+# Test out getting the cumulative reward starting from x0 and executing 
+# each agent's control trajectory.
+uAtraj = [1,1,2,2]
+uBtraj = [2,2,2,2]
+total_rewardA = mdp.get_reward_of_traj(x0, uAtraj, uBtraj, agentID="A")
+total_rewardB = mdp.get_reward_of_traj(x0, uAtraj, uBtraj, agentID="B")
+print("total_reward of agent A: ", total_rewardA)
+print("total_reward of agent B: ", total_rewardB)

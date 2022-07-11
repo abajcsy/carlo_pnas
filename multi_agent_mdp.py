@@ -106,11 +106,43 @@ class MultiAgentMDP(object):
         raise NotImplementedError("Need to implement feedback Nash solver!")
 
     def ol_stackelberg_solve(self, x0, hor):
+        """
+        Agent A is assumed to be the leader. 
+        Agent B is assumed to be the follower. 
+        """
+        all_action_seq = self.get_all_action_seq(hor)
+
+        # Q-value of agent B:
+        #   Table of size |action_seq| x |action_seq|. 
+        #   Stores the cumulative reward of the joint traj 
+        #   starting from x0 and executing (uAtraj, uBtraj) pair. 
+        QB = np.array(len(all_action_seq), len(all_action_seq))
+        for action_seq in all_action_seq:
+            uAtraj = list(action_seq)
+            print(uAtraj)
+            for action_seq in all_action_seq:
+                uBtraj = list(action_seq)
+                print(uBtraj)
+                reward_traj = self.get_reward_of_traj(x0, uAtraj, uBtraj, self.get_rewardA)
+
         raise NotImplementedError("Need to implement open-loop Stackelberg solver!")
 
     ###########################
     #### Utility functions ####
     ###########################
+
+    def get_reward_of_traj(self, x0, uAtraj, uBtraj, agentID="A"):
+        xcurr = x0
+        r = 0.0
+        for (aA, aB) in zip(uAtraj, uBtraj):
+            if agentID == "A":
+                r += self.get_rewardA(xcurr, aA, aB)
+            elif agentID == "B":
+                r += self.get_rewardB(xcurr, aA, aB)
+            else:
+                raise BaseException("undefined agent ID {}".format(agentID))
+            xcurr, _ = self.transition_helper(xcurr, aA, aB)
+        return r
 
     def get_all_action_seq(self, hor):
         """
@@ -212,7 +244,7 @@ class MultiAgentMDP(object):
             xB_prime = xB # "reset" the state if you went out of bounds. 
             yB_prime = yB
 
-        return xA_prime, yA_prime, xB_prime, yB_prime, illegal
+        return [xA_prime, yA_prime, xB_prime, yB_prime], illegal
 
     def get_rewardA(self, x, aA, aB):
         """
@@ -322,7 +354,7 @@ class MultiAgentMDP(object):
 
         return yB + self.YB * (xB + self.XB * (yA + self.YA * xA))
 
-    def vis(self, xA, yA, xB, yB):
+    def vis(self, x):
         """
         Visualizes the current joint state. 
         """
@@ -342,8 +374,8 @@ class MultiAgentMDP(object):
         # Plot markers for start and goal
         st = self.state_to_coor(self.start)
         go = self.state_to_coor(self.goal)
-        plt.scatter(xA, yA, c="red", marker="o", s=100)
-        plt.scatter(xB, yB, c="blue", marker="o", s=100)
+        plt.scatter(x[0], x[1], c="red", marker="o", s=100)
+        plt.scatter(x[2], x[3], c="blue", marker="o", s=100)
         plt.scatter(self.gA[0], self.gA[1], c="red", marker="x", s=300)
         plt.scatter(self.gB[0], self.gB[1], c="blue", marker="x", s=300)
 
