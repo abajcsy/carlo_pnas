@@ -152,22 +152,23 @@ class MultiAgentMDP(object):
             illegal [bool] -- Whether the action taken was legal or not.
         """
         xA, yA, xB, yB = self.state_to_coor(s)
+        x = [xA, yA, xB, yB]
 
         # call helper to do the heavy lifting. 
-        xA_prime, yA_prime, xB_prime, yB_prime, illegal = self.transition_helper(xA, yA, xB, yB, aA, aB)
+        x_prime, illegal = self.transition_helper(x, aA, aB)
 
-        s_prime = self.coor_to_state(xA_prime, yA_prime, xB_prime, yB_prime)
+        s_prime = self.coor_to_state(x_prime[0], x_prime[1], x_prime[2], x_prime[3] )
         if self.is_blocked(s_prime):
             illegal = True
 
         return s_prime, illegal
 
-    def transition_helper(self, xA, yA, xB, yB, aA, aB):
+    def transition_helper(self, x, aA, aB):
         """
         Given a *unpacked* state, action of agent A and agent B,
         apply the transition function to get the next state.
         Params:
-            xA, yA, xB, yB [int] -- x and y states for each agent
+            x [int] --  joint state containing x-y coordinates for each agent
             aA [int] -- Action agent A took.
             aB [int] -- Action agent B took.
         Returns:
@@ -177,6 +178,7 @@ class MultiAgentMDP(object):
         assert 0 <= aA < self.actionsA
         assert 0 <= aB < self.actionsB
 
+        xA, yA, xB, yB = x[0], x[1], x[2], x[3]
         xA_prime, yA_prime, xB_prime, yB_prime = xA, yA, xB, yB
         if aA == SingleAgentActions.LEFT:
             xA_prime = xA - 1
@@ -223,10 +225,10 @@ class MultiAgentMDP(object):
             reward [float] -- Agent A's instantaneous reward
         TODO: Can add more rewards here!
         """
-        xA_prime, yA_prime, xB_prime, yB_prime, _ = self.transition_helper(x[0], x[1], x[2], x[3], aA, aB)
+        x_prime, _ = self.transition_helper(x, aA, aB)
 
-        d_to_goalA = -np.linalg.norm(np.array([xA_prime - self.gA[0], yA_prime - self.gA[1]]), ord=2)**2
-        d_coll = np.linalg.norm(np.array([xA_prime - xB_prime, yA_prime - yB_prime]), ord=2)**2
+        d_to_goalA = -np.linalg.norm(np.array([x_prime[0] - self.gA[0], x_prime[1] - self.gA[1]]), ord=2)**2
+        d_coll = np.linalg.norm(np.array([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]]), ord=2)**2
 
         alpha = 1.0 # agent A's weight on collision cost. 
 
@@ -243,10 +245,10 @@ class MultiAgentMDP(object):
             reward [float] -- Agent B's instantaneous reward
         TODO: Can add more rewards here!
         """
-        xA_prime, yA_prime, xB_prime, yB_prime, _ = self.transition_helper(x[0], x[1], x[2], x[3], aA, aB)
+        x_prime, _ = self.transition_helper(x, aA, aB)
 
-        d_to_goalB = -np.linalg.norm(np.array([xB_prime - self.gB[0], yB_prime - self.gB[1]]), ord=2)**2
-        d_coll = np.linalg.norm(np.array([xA_prime - xB_prime, yA_prime - yB_prime]), ord=2)**2
+        d_to_goalB = -np.linalg.norm(np.array([x_prime[2] - self.gB[0], x_prime[3] - self.gB[1]]), ord=2)**2
+        d_coll = np.linalg.norm(np.array([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]]), ord=2)**2
         
         beta = 1.0 # agent B's weight on collision cost. 
 

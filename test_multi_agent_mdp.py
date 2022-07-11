@@ -39,8 +39,9 @@ r = mdp.get_rewardA(startA+startB, aA, aB)
 
 print('reward after each agent takes their action: ', r)
 
-xA_prime, yA_prime, xB_prime, yB_prime, _ = mdp.transition_helper(startA[0], startA[1], startB[0], startB[1], aA, aB)
-mdp.vis(xA_prime, yA_prime, xB_prime, yB_prime)
+xprime, _ = mdp.transition_helper(startA+startB, aA, aB)
+
+mdp.vis(xprime)
 
 # Generate action sequence of length hor. 
 hor = 3
