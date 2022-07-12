@@ -110,6 +110,7 @@ class MultiAgentMDP(object):
         Agent A is assumed to be the leader. 
         Agent B is assumed to be the follower. 
         """
+        print('Getting all action sequences of length ', hor)
         all_action_seq = self.get_all_action_seq(hor)
 
         # "Q-value" of agent B for specific initial condition: 
@@ -117,6 +118,7 @@ class MultiAgentMDP(object):
         #   Table of size |action_seq| x |action_seq|. 
         #   Stores the cumulative reward of the joint traj 
         #   starting from x0 and executing (uAtraj, uBtraj) pair. 
+        print('Computing reward for agent B for each (uAtraj, uBtraj) pair...')
         QB = np.zeros([len(all_action_seq), len(all_action_seq)])
         for uAidx in range(len(all_action_seq)):
             uAtraj = list(all_action_seq[uAidx])
@@ -132,6 +134,7 @@ class MultiAgentMDP(object):
         # "Q-value" of agent A for specific initial condition:
         #       QA(uA)
         # where uB*(x0, uA) responds optimally to a given uA
+        print('Computing reward for agent A for each (uAtraj)...')
         QA = np.zeros(len(all_action_seq))
         for uAidx in range(len(all_action_seq)):
             uAtraj = list(all_action_seq[uAidx])
@@ -141,6 +144,7 @@ class MultiAgentMDP(object):
             reward_traj = self.get_reward_of_traj(x0, uAtraj, uBtraj_opt, agentID="A")
             QA[uAidx] = reward_traj
 
+        print('Computing optimal state and control trajectories...')
         # get the optimal action sequence for agent A:
         uAidx_opt = np.argmax(QA)
         uAtraj_opt = all_action_seq[uAidx_opt]
@@ -156,9 +160,58 @@ class MultiAgentMDP(object):
             xnext, _ = self.transition_helper(xcurr, uAtraj_opt[i], uBtraj_opt[i])
             xtraj[:,i+1] = np.array(xnext)
             xcurr = xnext 
-        print(xtraj)
 
         return xtraj, uAtraj_opt, uBtraj_opt
+
+    def fb_stackelberg_solve(self, x0, hor):
+        # store flattened state-space value func. 
+        # V is table of size |S| x horizon+1
+        VA = np.zeros([self.S, hor+1])
+        VB = np.zeros([self.S, hor+1])
+
+        QA = np.zeros([self.S, self.actionsA, hor])
+        QB = np.zeros([self.S, self.actionsA, self.actionsB, hor])
+
+        # compute the value functions for agent A and B
+        print('Solving feedback Stackelberg game...')
+        for t in range(hor-1, 0, -1):
+            print('---> ', t, ' backups remaining ...')
+            for s in range(self.S):
+                xcurr = self.state_to_coor(s)
+                for aA in range(self.actionsA):
+                    for aB in range(self.actionsB):
+                        xnext, ill = self.transition_helper(xcurr, aA, aB)
+                        snext = self.coor_to_state(xnext[0], xnext[1], xnext[2], xnext[3])
+                        QB[s, aA, aB, t] = self.get_rewardB(xcurr, aA, aB) \
+                                            + VB[snext, t+1]
+                    # get optimal aB*(s, aA) in response to aA
+                    uBidx_opt = np.argmax(QB[s, aA, :, t])
+                    xnext, _ = self.transition_helper(xcurr, aA, uBidx_opt)
+                    snext = self.coor_to_state(xnext[0], xnext[1], xnext[2], xnext[3])
+                    QA[s, aA, t] = self.get_rewardA(xcurr, aA, uBidx_opt) \
+                                            + VA[snext, t+1]
+                # get optimal action for agent A
+                uAidx_opt = np.argmax(QA[s, :, t])
+                VA[s, t] = QA[s, uAidx_opt, t]
+                VB[s, t] = np.min(QB[s,uAidx_opt,:,t])
+
+        # compute optimal state and control trajectories starting from x0
+        print('Computing optimal state and control trajectory from x0: ', x0)
+        uAtraj = np.zeros(hor)
+        uBtraj = np.zeros(hor)
+        xtraj = np.zeros([len(x0), hor+1])
+        xtraj[:,0] = x0
+        scurr = self.coor_to_state(x0[0], x0[1], x0[2], x0[3])
+        for t in range(hor):
+            uAidx_opt = np.argmax(QA[scurr, :, t])
+            uBidx_opt = np.argmax(QB[scurr,uAidx_opt,:,t])
+            uAtraj[t] = uAidx_opt
+            uBtraj[t] = uBidx_opt
+            snext, _ = self.transition(scurr, uAidx_opt, uBidx_opt)
+            xnext = self.state_to_coor(snext)
+            xtraj[:,t+1] = np.array(xnext)
+            scurr = snext
+        return xtraj, uAtraj, uBtraj
 
     ###########################
     #### Utility functions ####
@@ -272,7 +325,7 @@ class MultiAgentMDP(object):
             illegal = True
             xA_prime = xA # "reset" the state if you went out of bounds. 
             yA_prime = yA
-        elif xB_prime < 0 or xB_prime >= self.XB or yB_prime < 0 or yB_prime >= self.YB:
+        if xB_prime < 0 or xB_prime >= self.XB or yB_prime < 0 or yB_prime >= self.YB:
             illegal = True
             xB_prime = xB # "reset" the state if you went out of bounds. 
             yB_prime = yB
@@ -296,7 +349,8 @@ class MultiAgentMDP(object):
         d_coll = np.linalg.norm(np.array([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]]), ord=2)**2
 
         alpha1 = 5.0  
-        alpha2 = 6.0    # agent A's weight on collision cost. 
+        alpha2 = 6.0    # agent A's weight on collision cost.
+         
         return alpha1 * d_to_goalA + alpha2 * d_coll
 
     def get_rewardB(self, x, aA, aB):
