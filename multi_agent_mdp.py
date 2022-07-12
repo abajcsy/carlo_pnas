@@ -116,14 +116,13 @@ class MultiAgentMDP(object):
         #   Table of size |action_seq| x |action_seq|. 
         #   Stores the cumulative reward of the joint traj 
         #   starting from x0 and executing (uAtraj, uBtraj) pair. 
-        QB = np.array(len(all_action_seq), len(all_action_seq))
+        QB = np.array([len(all_action_seq), len(all_action_seq)])
         for action_seq in all_action_seq:
             uAtraj = list(action_seq)
             print(uAtraj)
             for action_seq in all_action_seq:
                 uBtraj = list(action_seq)
-                print(uBtraj)
-                reward_traj = self.get_reward_of_traj(x0, uAtraj, uBtraj, self.get_rewardA)
+                reward_traj = self.get_reward_of_traj(x0, uAtraj, uBtraj, agentID="B")
 
         raise NotImplementedError("Need to implement open-loop Stackelberg solver!")
 
@@ -225,11 +224,11 @@ class MultiAgentMDP(object):
 
         if aB == SingleAgentActions.LEFT:
             xB_prime = xB - 1
-        elif aA == SingleAgentActions.RIGHT:
+        elif aB == SingleAgentActions.RIGHT:
             xB_prime = xB + 1
-        elif aA == SingleAgentActions.DOWN:
+        elif aB == SingleAgentActions.DOWN:
             yB_prime = yB + 1
-        elif aA == SingleAgentActions.UP:
+        elif aB == SingleAgentActions.UP:
             yB_prime = yB - 1
         else:
             raise BaseException("undefined action for agent B {}".format(aB))
