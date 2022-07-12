@@ -4,6 +4,8 @@ from enum import IntEnum
 import random
 import matplotlib.pyplot as plt
 import matplotlib
+import skfmm
+import seaborn as sns
 
 import itertools 
 
@@ -68,6 +70,20 @@ class MultiAgentMDP(object):
         # Set the obstacles in the environment.
         self.obstacles = obstacles
 
+        # design cost for collision as a "bump" distance function.
+        coll_rad = 1.5
+        phi = np.ones([self.XA, self.YA])
+        for x in range(self.XA):
+            for y in range(self.YA):
+                if np.linalg.norm(np.array([x, y]))**2 <= coll_rad**2:
+                    phi[x, y] = -1
+        coll_signed_dist = skfmm.distance(phi)
+
+        # create bump distance function
+        high_dist_locs = coll_signed_dist > 0
+        coll_signed_dist[high_dist_locs] = 0
+        self.coll_signed_dist = coll_signed_dist
+
     ###########################
     #### Planning functions ####
     ###########################
@@ -129,7 +145,8 @@ class MultiAgentMDP(object):
 
         # Debugging: visualize Q-function for agent B.
         # plt.imshow(QB)
-        # plt.show()
+        ax = sns.heatmap(QB, linewidth=0)
+        plt.show()
 
         # "Q-value" of agent A for specific initial condition:
         #       QA(uA)
@@ -143,6 +160,11 @@ class MultiAgentMDP(object):
             uBtraj_opt = all_action_seq[uBidx_opt]
             reward_traj = self.get_reward_of_traj(x0, uAtraj, uBtraj_opt, agentID="A")
             QA[uAidx] = reward_traj
+
+        # Debugging: visualize Q-function for agent A.
+        QAtmp = np.expand_dims(QA, axis=0)
+        ax = sns.heatmap(QAtmp, linewidth=0)
+        plt.show()
 
         print('Computing optimal state and control trajectories...')
         # get the optimal action sequence for agent A:
@@ -174,7 +196,8 @@ class MultiAgentMDP(object):
 
         # compute the value functions for agent A and B
         print('Solving feedback Stackelberg game...')
-        for t in range(hor-1, 0, -1):
+        import pdb
+        for t in range(hor-1, -1, -1):
             print('---> ', t, ' backups remaining ...')
             for s in range(self.S):
                 xcurr = self.state_to_coor(s)
@@ -346,12 +369,15 @@ class MultiAgentMDP(object):
         x_prime, _ = self.transition_helper(x, aA, aB)
 
         d_to_goalA = -np.linalg.norm(np.array([x_prime[0] - self.gA[0], x_prime[1] - self.gA[1]]), ord=2)**2
-        d_coll = np.linalg.norm(np.array([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]]), ord=2)**2
+        # d_coll = np.linalg.norm(np.array([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]]), ord=2)**2
+
+        x_diff = np.abs([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]])
+        reward_coll = self.coll_signed_dist[int(x_diff[0]), int(x_diff[1])]       
 
         alpha1 = 5.0  
-        alpha2 = 6.0    # agent A's weight on collision cost.
-         
-        return alpha1 * d_to_goalA + alpha2 * d_coll
+        alpha2 = 100.0    # agent A's weight on collision cost.
+
+        return alpha1 * d_to_goalA + alpha2 * reward_coll
 
     def get_rewardB(self, x, aA, aB):
         """
@@ -367,12 +393,15 @@ class MultiAgentMDP(object):
         x_prime, _ = self.transition_helper(x, aA, aB)
 
         d_to_goalB = -np.linalg.norm(np.array([x_prime[2] - self.gB[0], x_prime[3] - self.gB[1]]), ord=2)**2
-        d_coll = np.linalg.norm(np.array([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]]), ord=2)**2
-        
-        beta1 = 5.0 
-        beta2 = 6.0 # agent B's weight on collision cost. 
+        # d_coll = np.linalg.norm(np.array([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]]), ord=2)**2
 
-        return beta1 * d_to_goalB + beta2 * d_coll
+        x_diff = np.abs([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]])
+        reward_coll = self.coll_signed_dist[int(x_diff[0]), int(x_diff[1])]    
+
+        beta1 = 5.0 
+        beta2 = 100.0 # agent B's weight on collision cost. 
+
+        return beta1 * d_to_goalB + beta2 * reward_coll
     
     def is_blocked(self, s):
         """
@@ -515,4 +544,9 @@ class MultiAgentMDP(object):
         ax = plt.gca()
         # plt.minorticks_on
         ax.grid(True, which='both', color='black', linestyle='-', linewidth=1)
+        plt.show()
+
+    def plot_coll_signed_dist(self):
+        im = plt.imshow(self.coll_signed_dist)
+        plt.colorbar(im)
         plt.show()
