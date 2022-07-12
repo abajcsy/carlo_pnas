@@ -112,19 +112,53 @@ class MultiAgentMDP(object):
         """
         all_action_seq = self.get_all_action_seq(hor)
 
-        # Q-value of agent B:
+        # "Q-value" of agent B for specific initial condition: 
+        #       QB(uA, uB)
         #   Table of size |action_seq| x |action_seq|. 
         #   Stores the cumulative reward of the joint traj 
         #   starting from x0 and executing (uAtraj, uBtraj) pair. 
-        QB = np.array([len(all_action_seq), len(all_action_seq)])
-        for action_seq in all_action_seq:
-            uAtraj = list(action_seq)
-            print(uAtraj)
-            for action_seq in all_action_seq:
-                uBtraj = list(action_seq)
+        QB = np.zeros([len(all_action_seq), len(all_action_seq)])
+        for uAidx in range(len(all_action_seq)):
+            uAtraj = list(all_action_seq[uAidx])
+            for uBidx in range(len(all_action_seq)):
+                uBtraj = list(all_action_seq[uBidx])
                 reward_traj = self.get_reward_of_traj(x0, uAtraj, uBtraj, agentID="B")
+                QB[uAidx, uBidx] = reward_traj
 
-        raise NotImplementedError("Need to implement open-loop Stackelberg solver!")
+        # Debugging: visualize Q-function for agent B.
+        # plt.imshow(QB)
+        # plt.show()
+
+        # "Q-value" of agent A for specific initial condition:
+        #       QA(uA)
+        # where uB*(x0, uA) responds optimally to a given uA
+        QA = np.zeros(len(all_action_seq))
+        for uAidx in range(len(all_action_seq)):
+            uAtraj = list(all_action_seq[uAidx])
+            # get the best action sequence for agent B in response to agent A:
+            uBidx_opt = np.argmax(QB[uAidx, :])
+            uBtraj_opt = all_action_seq[uBidx_opt]
+            reward_traj = self.get_reward_of_traj(x0, uAtraj, uBtraj_opt, agentID="A")
+            QA[uAidx] = reward_traj
+
+        # get the optimal action sequence for agent A:
+        uAidx_opt = np.argmax(QA)
+        uAtraj_opt = all_action_seq[uAidx_opt]
+        # get the optimal response from agent B:
+        uBidx_opt = np.argmax(QB[uAidx_opt, :])
+        uBtraj_opt = all_action_seq[uBidx_opt]
+
+        # generate the state trajectory by forward simulation:
+        xtraj = np.zeros([len(x0), hor+1])
+        xtraj[:,0] = x0
+        xcurr = x0
+        for i in range(len(uAtraj_opt)):
+            xnext, _ = self.transition_helper(xcurr, uAtraj_opt[i], uBtraj_opt[i])
+            xtraj[:,i+1] = np.array(xnext)
+            xcurr = xnext 
+        print(xtraj)
+
+        return xtraj, uAtraj_opt, uBtraj_opt
 
     ###########################
     #### Utility functions ####
@@ -261,9 +295,9 @@ class MultiAgentMDP(object):
         d_to_goalA = -np.linalg.norm(np.array([x_prime[0] - self.gA[0], x_prime[1] - self.gA[1]]), ord=2)**2
         d_coll = np.linalg.norm(np.array([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]]), ord=2)**2
 
-        alpha = 1.0 # agent A's weight on collision cost. 
-
-        return d_to_goalA + alpha * d_coll
+        alpha1 = 5.0  
+        alpha2 = 6.0    # agent A's weight on collision cost. 
+        return alpha1 * d_to_goalA + alpha2 * d_coll
 
     def get_rewardB(self, x, aA, aB):
         """
@@ -281,9 +315,10 @@ class MultiAgentMDP(object):
         d_to_goalB = -np.linalg.norm(np.array([x_prime[2] - self.gB[0], x_prime[3] - self.gB[1]]), ord=2)**2
         d_coll = np.linalg.norm(np.array([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]]), ord=2)**2
         
-        beta = 1.0 # agent B's weight on collision cost. 
+        beta1 = 5.0 
+        beta2 = 6.0 # agent B's weight on collision cost. 
 
-        return d_to_goalB + beta * d_coll
+        return beta1 * d_to_goalB + beta2 * d_coll
     
     def is_blocked(self, s):
         """
@@ -377,6 +412,45 @@ class MultiAgentMDP(object):
         plt.scatter(x[2], x[3], c="blue", marker="o", s=100)
         plt.scatter(self.gA[0], self.gA[1], c="red", marker="x", s=300)
         plt.scatter(self.gB[0], self.gB[1], c="blue", marker="x", s=300)
+
+        plt.xticks(range(self.XA), range(self.XA))
+        plt.yticks(np.arange(0,self.YA),range(self.YA))
+        # ax1.set_yticklabels([])
+        # ax1.set_xticklabels([])
+        # ax1.set_yticks()
+        # ax1.set_xticks([])
+        ax = plt.gca()
+        # plt.minorticks_on
+        ax.grid(True, which='both', color='black', linestyle='-', linewidth=1)
+        plt.show()
+
+    def vis_solution(self, xtraj):
+        """
+        Visualizes the current joint state. 
+        """
+        # Create 2D world with obstacles on the map.
+        world = 0.5*np.ones((self.YA, self.XA))
+
+        # Add obstacles in the world in opaque color.
+        if self.obstacles is not None:
+            for obstacle in self.obstacles:
+                lower = obstacle[0]
+                upper = obstacle[1]
+                world[upper[1]:lower[1]+1, lower[0]:upper[0]+1] = 1.0
+
+        fig1, ax1 = plt.subplots()
+        plt.imshow(world, cmap='Greys', interpolation='nearest')
+
+        # Plot markers for start and goal
+        st = self.state_to_coor(self.start)
+        go = self.state_to_coor(self.goal)
+        plt.scatter(xtraj[0,0], xtraj[1,0], c="red", marker="o", s=100)
+        plt.scatter(xtraj[2,0], xtraj[3,0], c="blue", marker="o", s=100)
+        plt.scatter(self.gA[0], self.gA[1], c="red", marker="x", s=300)
+        plt.scatter(self.gB[0], self.gB[1], c="blue", marker="x", s=300)
+
+        plt.plot(xtraj[0,:], xtraj[1,:], 'r-o')
+        plt.plot(xtraj[2,:], xtraj[3,:], 'b-o')
 
         plt.xticks(range(self.XA), range(self.XA))
         plt.yticks(np.arange(0,self.YA),range(self.YA))
