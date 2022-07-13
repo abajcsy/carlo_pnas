@@ -116,7 +116,55 @@ class MultiAgentMDP(object):
         return xtraj, uAtraj, uBtraj
 
     def ol_nash_solve(self, x0, hor):
-        raise NotImplementedError("Need to implement open-loop Nash solver!")
+        print('Getting all action sequences of length ', hor)
+        all_action_seq = self.get_all_action_seq(hor)
+        length_of_all_action_seq = len(all_action_seq)
+        # "Q-value" of agent A for specific initial condition: 
+        #       QA(uA, uB)
+        # "Q-value" of agent B for specific initial condition: 
+        #       QB(uA, uB)
+        print('Computing rewards for agents A and B for each (uAtraj, uBtraj) pair...')
+        QA = np.zeros([length_of_all_action_seq, length_of_all_action_seq])
+        QB = np.zeros([length_of_all_action_seq, length_of_all_action_seq])
+
+        for uAidx in range(length_of_all_action_seq):
+            uAtraj = list(all_action_seq[uAidx])
+            for uBidx in range(length_of_all_action_seq):
+                uBtraj = list(all_action_seq[uBidx])
+                QA[uAidx, uBidx] = self.get_reward_of_traj(x0, uAtraj, uBtraj, agentID='A')
+                QB[uAidx, uBidx] = self.get_reward_of_traj(x0, uAtraj, uBtraj, agentID='B')
+        # align the argmax_uA and argmax_uB
+        uAidx_list = np.argmax(QA,0)
+        uBidx_list = np.argmax(QB,1)
+        uAidx_opt_list = np.array(([]), dtype=np.int64)
+        uBidx_opt_list = np.array(([]), dtype=np.int64)
+        for idx in range(length_of_all_action_seq):
+            if uBidx_list[uAidx_list[idx]] == idx:
+                uAidx_opt_list = np.append(uAidx_opt_list, uAidx_list[idx])
+                uBidx_opt_list = np.append(uBidx_opt_list, uBidx_list[idx])
+        assert any(uAidx_opt_list), f"OLNE does not exist"
+        
+        # get the optimal action sequence for agent A:
+        uAidx_opt = uAidx_opt_list[0]
+        uAtraj_opt = all_action_seq[uAidx_opt]
+        # get the optimal action sequence for agent B:
+        uBidx_opt = uBidx_opt_list[0]
+        uBtraj_opt = all_action_seq[uBidx_opt]
+        print('Computing optimal state and control trajectories...')
+        # generate the state trajectory by forward simulation:
+        xtraj = np.zeros([len(x0), hor+1])
+        xtraj[:,0] = x0
+        xcurr = x0
+        for i in range(len(uAtraj_opt)):
+            xnext, _ = self.transition_helper(xcurr, uAtraj_opt[i], uBtraj_opt[i])
+            xtraj[:,i+1] = np.array(xnext)
+            xcurr = xnext 
+        uniqueness_OLNE = True if len(uAidx_opt_list) == 1 else False
+        if len(uAidx_opt_list) == 1:
+            print("OLNE is unique")
+        else:
+            print("OLNE is not unique, the total number of OLNEs is {}".format(len(uAidx_opt_list)))
+        return xtraj, uAtraj_opt, uBtraj_opt
 
     def fb_nash_solve(self, x0, hor):
         raise NotImplementedError("Need to implement feedback Nash solver!")
@@ -588,4 +636,9 @@ class MultiAgentMDP(object):
         ax = plt.gca()
         # plt.minorticks_on
         ax.grid(True, which='both', color='black', linestyle='-', linewidth=1)
+        plt.show()
+
+    def plot_coll_signed_dist(self):
+        im = plt.imshow(self.coll_signed_dist)
+        plt.colorbar(im)
         plt.show()
