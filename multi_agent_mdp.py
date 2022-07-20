@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 import skfmm
 import seaborn as sns
+import nashpy as nash
+import time
 
 import itertools 
 
@@ -118,8 +120,118 @@ class MultiAgentMDP(object):
     def ol_nash_solve(self, x0, hor):
         raise NotImplementedError("Need to implement open-loop Nash solver!")
 
+    def find_pure_eqs(self, eqs):
+        """
+        Finds the pure strategy for the given set of equilibria. 
+        Params: 
+            eqs [list] -- List of equilibria. 
+        Returns: 
+            [list] -- List of pure equilibria. 
+        """
+        # Find the pure strategy. 
+        pure_eqs = []
+        for (eqA, eqB) in eqs:
+            if np.linalg.norm(eqA,0) == 1 and np.linalg.norm(eqB,0) == 1:
+                pure_eqs.append((eqA, eqB))
+        return pure_eqs
+
+    def get_eq_index(self, eqs):
+        eq_index = []
+        aAs, aBs = range(self.actionsA), range(self.actionsB)
+        for (eqA, eqB) in eqs:
+            eq_index.append((np.argmax(eqA), np.argmax(eqB)))
+        return eq_index
+
     def fb_nash_solve(self, x0, hor):
-        raise NotImplementedError("Need to implement feedback Nash solver!")
+        # store flattened state-space value func. 
+        # V is table of size |S| x horizon+1
+        VA = np.zeros([self.S, hor+1])
+        VB = np.zeros([self.S, hor+1])
+
+        QA = np.zeros([self.S, self.actionsA, self.actionsB, hor])
+        QB = np.zeros([self.S, self.actionsA, self.actionsB, hor])
+
+        opt_eqs = {}
+
+        # compute the value functions for agent A and B
+        print('Solving feedback Nash game...')
+        import pdb
+        for t in range(hor-1, -1, -1):
+            print('---> ', t, ' backups remaining ...')
+            avg_times = []
+            for s in range(self.S):
+                start = time.time()
+                xcurr = self.state_to_coor(s)
+                for aA in range(self.actionsA):
+                    for aB in range(self.actionsB):
+                        xnext, ill = self.transition_helper(xcurr, aA, aB)
+                        snext = self.coor_to_state(xnext[0], xnext[1], xnext[2], xnext[3])
+                        QA[s, aA, aB, t] = self.get_rewardA(xcurr, aA, aB) \
+                                                + VA[snext, t+1]
+                        QB[s, aA, aB, t] = self.get_rewardB(xcurr, aA, aB) \
+                                            + VB[snext, t+1]
+                # get optimal action for agent A
+                A,B = QA[s, :, :, t], QB[s, :, :, t]
+                uAidx_list = np.argmax(A,0)
+                uBidx_list = np.argmax(B,1)
+                uAidx_opt_list = np.array(([]), dtype=np.int64)
+                uBidx_opt_list = np.array(([]), dtype=np.int64)
+                for idx in range(len(uAidx_list)):
+                    if uBidx_list[uAidx_list[idx]] == idx:
+                        uAidx_opt_list = np.append(uAidx_opt_list, uAidx_list[idx])
+                        uBidx_opt_list = np.append(uBidx_opt_list, uBidx_list[idx])
+                try:
+                    assert len(uAidx_opt_list)>0
+                except:
+                    print(uAidx_opt_list)
+                    x = self.state_to_coor(s)
+                    print(f"State: {x}")
+                    print(f"Actions: {aA} {aB}")
+                    print(f"QA: {A}")
+                    print(f"QB: {B}")
+                    raise BaseException("No pure strategy found!")
+                # rps = nash.Game(A,B)
+                # eqs = rps.support_enumeration()
+                # pure_eqs = self.find_pure_eqs(eqs)
+                # if len(pure_eqs) == 0:
+                #     eqs = list(eqs)
+                #     x = self.state_to_coor(s)
+                #     print(f"State: {x}")
+                #     print(f"Actions: {aA} {aB}")
+                #     print(f"QA: {A}")
+                #     print(f"QB: {B}")
+                #     print(f"Mixed Eqs: {eqs}")
+                #     raise BaseException("No pure strategy found!")
+                
+                # eq_index = self.get_eq_index(pure_eqs)
+                # uAidx_opt, uBidx_opt = eq_index[0]
+                uAidx_opt, uBidx_opt = uAidx_opt_list[0], uBidx_opt_list[0]
+                opt_eqs[(s,t)] = (uAidx_opt, uBidx_opt)
+
+                VA[s, t] = QA[s, uAidx_opt, uBidx_opt, t]
+                VB[s, t] = QB[s,uAidx_opt, uBidx_opt,t]
+
+                end = time.time()
+                avg_times.append(end-start)
+            print("Average time per state: ", np.mean(avg_times))
+
+        # compute optimal state and control trajectories starting from x0
+        print('Computing optimal state and control trajectory from x0: ', x0)
+        uAtraj = np.zeros(hor)
+        uBtraj = np.zeros(hor)
+        xtraj = np.zeros([len(x0), hor+1])
+        xtraj[:,0] = x0
+        scurr = self.coor_to_state(x0[0], x0[1], x0[2], x0[3])
+        for t in range(hor):
+            uAidx_opt = opt_eqs((scurr, t))[0]
+            uBidx_opt = opt_eqs((scurr, t))[1]
+            uAtraj[t] = uAidx_opt
+            uBtraj[t] = uBidx_opt
+            snext, _ = self.transition(scurr, uAidx_opt, uBidx_opt)
+            xnext = self.state_to_coor(snext)
+            xtraj[:,t+1] = np.array(xnext)
+            scurr = snext
+        return xtraj, uAtraj, uBtraj
 
     def ol_stackelberg_solve(self, x0, hor):
         """
