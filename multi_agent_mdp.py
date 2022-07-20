@@ -607,7 +607,7 @@ class MultiAgentMDP(object):
         beta2 = 100.0 # agent B's weight on collision cost. 
         beta3 = 1e4     # agent B's weight on colliding against the obstacles
 
-        return beta1 * d_to_goalB + beta2 * reward_coll + beta3 * self.static_obstacles_table[x[0],x[1]]
+        return beta1 * d_to_goalB + beta2 * reward_coll + beta3 * self.static_obstacles_table[x[2],x[3]]
     
     def is_blocked(self, s):
         """
