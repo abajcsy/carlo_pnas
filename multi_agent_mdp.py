@@ -705,7 +705,7 @@ class MultiAgentMDP(object):
         # Plot the static obstacles
         for item in range(len(self.static_obstacles)):
             plt.scatter(self.static_obstacles[item][0], self.static_obstacles[item][1],
-                c='black', marker = "s", s = 200)
+                c='black', marker = "s", s = 400)
 
         plt.xticks(range(self.XA), range(self.XA))
         plt.yticks(np.arange(0,self.YA),range(self.YA))
@@ -746,7 +746,7 @@ class MultiAgentMDP(object):
         # Plot the static obstacles
         for item in range(len(self.static_obstacles)):
             plt.scatter(self.static_obstacles[item][0], self.static_obstacles[item][1],
-                c='black', marker = "s", s = 200)
+                c='black', marker = "s", s = 400)
 
         # Plot the collision radius centered around agent A
         ax = plt.gca()
