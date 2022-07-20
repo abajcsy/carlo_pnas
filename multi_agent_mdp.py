@@ -73,11 +73,11 @@ class MultiAgentMDP(object):
         self.obstacles = obstacles
 
         # design cost for collision as a "bump" distance function.
-        coll_rad = 1.5
+        self.coll_rad = 1.5
         phi = np.ones([self.XA, self.YA])
         for x in range(self.XA):
             for y in range(self.YA):
-                if np.linalg.norm(np.array([x, y]))**2 <= coll_rad**2:
+                if np.linalg.norm(np.array([x, y]))**2 <= self.coll_rad**2:
                     phi[x, y] = -1
         coll_signed_dist = skfmm.distance(phi)
 
@@ -118,7 +118,55 @@ class MultiAgentMDP(object):
         return xtraj, uAtraj, uBtraj
 
     def ol_nash_solve(self, x0, hor):
-        raise NotImplementedError("Need to implement open-loop Nash solver!")
+        print('Getting all action sequences of length ', hor)
+        all_action_seq = self.get_all_action_seq(hor)
+        length_of_all_action_seq = len(all_action_seq)
+        # "Q-value" of agent A for specific initial condition: 
+        #       QA(uA, uB)
+        # "Q-value" of agent B for specific initial condition: 
+        #       QB(uA, uB)
+        print('Computing rewards for agents A and B for each (uAtraj, uBtraj) pair...')
+        QA = np.zeros([length_of_all_action_seq, length_of_all_action_seq])
+        QB = np.zeros([length_of_all_action_seq, length_of_all_action_seq])
+
+        for uAidx in range(length_of_all_action_seq):
+            uAtraj = list(all_action_seq[uAidx])
+            for uBidx in range(length_of_all_action_seq):
+                uBtraj = list(all_action_seq[uBidx])
+                QA[uAidx, uBidx] = self.get_reward_of_traj(x0, uAtraj, uBtraj, agentID='A')
+                QB[uAidx, uBidx] = self.get_reward_of_traj(x0, uAtraj, uBtraj, agentID='B')
+        # align the argmax_uA and argmax_uB
+        uAidx_list = np.argmax(QA,0)
+        uBidx_list = np.argmax(QB,1)
+        uAidx_opt_list = np.array(([]), dtype=np.int64)
+        uBidx_opt_list = np.array(([]), dtype=np.int64)
+        for idx in range(length_of_all_action_seq):
+            if uBidx_list[uAidx_list[idx]] == idx:
+                uAidx_opt_list = np.append(uAidx_opt_list, uAidx_list[idx])
+                uBidx_opt_list = np.append(uBidx_opt_list, uBidx_list[idx])
+        assert any(uAidx_opt_list), f"OLNE does not exist"
+        
+        # get the optimal action sequence for agent A:
+        uAidx_opt = uAidx_opt_list[0]
+        uAtraj_opt = all_action_seq[uAidx_opt]
+        # get the optimal action sequence for agent B:
+        uBidx_opt = uBidx_opt_list[0]
+        uBtraj_opt = all_action_seq[uBidx_opt]
+        print('Computing optimal state and control trajectories...')
+        # generate the state trajectory by forward simulation:
+        xtraj = np.zeros([len(x0), hor+1])
+        xtraj[:,0] = x0
+        xcurr = x0
+        for i in range(len(uAtraj_opt)):
+            xnext, _ = self.transition_helper(xcurr, uAtraj_opt[i], uBtraj_opt[i])
+            xtraj[:,i+1] = np.array(xnext)
+            xcurr = xnext 
+        uniqueness_OLNE = True if len(uAidx_opt_list) == 1 else False
+        if len(uAidx_opt_list) == 1:
+            print("OLNE is unique")
+        else:
+            print("OLNE is not unique, the total number of OLNEs is {}".format(len(uAidx_opt_list)))
+        return xtraj, uAtraj_opt, uBtraj_opt
 
     def find_pure_eqs(self, eqs):
         """
@@ -256,9 +304,10 @@ class MultiAgentMDP(object):
                 QB[uAidx, uBidx] = reward_traj
 
         # Debugging: visualize Q-function for agent B.
-        # plt.imshow(QB)
-        ax = sns.heatmap(QB, linewidth=0)
-        plt.show()
+        # p = plt.imshow(QB)
+        # plt.colorbar(p)
+        # # ax = sns.heatmap(QB, linewidth=0)
+        # plt.show()
 
         # "Q-value" of agent A for specific initial condition:
         #       QA(uA)
@@ -269,31 +318,43 @@ class MultiAgentMDP(object):
             uAtraj = list(all_action_seq[uAidx])
             # get the best action sequence for agent B in response to agent A:
             uBidx_opt = np.argmax(QB[uAidx, :])
+            # ========= DEBUGGING ========= #
+            # Tests if the agent B's optimal control traj is unique!
+            all_uBopts = np.argwhere(QB[uAidx, :] == QB[uAidx, uBidx_opt])
+            all_uBopts = np.array(all_uBopts)
+            if len(all_uBopts.flatten()) > 1:
+                print("[OL-SB] Multiple solutions for uBtraj*(x0, uAtraj)! Num solns: ", len(all_uBopts.flatten()))
+                import pdb;
+                pdb.set_trace()
+            # ========= DEBUGGING ========= #
             uBtraj_opt = all_action_seq[uBidx_opt]
             reward_traj = self.get_reward_of_traj(x0, uAtraj, uBtraj_opt, agentID="A")
             QA[uAidx] = reward_traj
 
         # Debugging: visualize Q-function for agent A.
-        QAtmp = np.expand_dims(QA, axis=0)
-        ax = sns.heatmap(QAtmp, linewidth=0)
-        plt.show()
+        # QAtmp = np.expand_dims(QA, axis=0)
+        # ax = sns.heatmap(QAtmp, linewidth=0)
+        # plt.show()
 
         print('Computing optimal state and control trajectories...')
         # get the optimal action sequence for agent A:
         uAidx_opt = np.argmax(QA)
+        # ========= DEBUGGING ========= #
+        # Tests if agent A's optimal control traj is unique!
+        all_uAopts = np.argwhere(QA[uAidx_opt] == QA[:])
+        all_uAopts = np.array(all_uAopts)
+        if len(all_uAopts.flatten()) > 1:
+            print("[OL-SB] Multiple solutions for uAtraj*(x0)! Num solns: ", len(all_uAopts.flatten()))
+            import pdb;
+            pdb.set_trace()
+        # ========= DEBUGGING ========= #
         uAtraj_opt = all_action_seq[uAidx_opt]
         # get the optimal response from agent B:
         uBidx_opt = np.argmax(QB[uAidx_opt, :])
         uBtraj_opt = all_action_seq[uBidx_opt]
 
         # generate the state trajectory by forward simulation:
-        xtraj = np.zeros([len(x0), hor+1])
-        xtraj[:,0] = x0
-        xcurr = x0
-        for i in range(len(uAtraj_opt)):
-            xnext, _ = self.transition_helper(xcurr, uAtraj_opt[i], uBtraj_opt[i])
-            xtraj[:,i+1] = np.array(xnext)
-            xcurr = xnext 
+        xtraj = self.get_xtraj_from_utraj(x0, uAtraj_opt, uBtraj_opt)
 
         return xtraj, uAtraj_opt, uBtraj_opt
 
@@ -340,17 +401,43 @@ class MultiAgentMDP(object):
         for t in range(hor):
             uAidx_opt = np.argmax(QA[scurr, :, t])
             uBidx_opt = np.argmax(QB[scurr,uAidx_opt,:,t])
+            # ========= DEBUGGING ========= #
+            # Tests if the agent B's optimal control is unique!
+            all_uBopts = np.argwhere(QB[scurr, uAidx_opt, :, t] == QB[scurr, uAidx_opt, uBidx_opt, t])
+            all_uBopts = np.array(all_uBopts).flatten()
+            if len(all_uBopts) > 1:
+                print("[FB-SB] Multiple solutions for uB*(x0, uA, t=", t, ")! Num solns: ", len(all_uBopts))
+                rand_idx = np.random.randint(0,len(all_uBopts)-1)
+                uBidx_opt = all_uBopts[0]
+
+            # Tests if agent A's optimal control is unique!
+            all_uAopts = np.argwhere(QA[scurr, uAidx_opt, t] == QA[scurr, :, t])
+            all_uAopts = np.array(all_uAopts).flatten()
+            if len(all_uAopts) > 1:
+                print("[FB-SB] Multiple solutions for uA*(x0)! Num solns: ", len(all_uAopts))
+            # ========= DEBUGGING ========= #
             uAtraj[t] = uAidx_opt
             uBtraj[t] = uBidx_opt
             snext, _ = self.transition(scurr, uAidx_opt, uBidx_opt)
             xnext = self.state_to_coor(snext)
             xtraj[:,t+1] = np.array(xnext)
             scurr = snext
+
         return xtraj, uAtraj, uBtraj
 
     ###########################
     #### Utility functions ####
     ###########################
+
+    def get_xtraj_from_utraj(self, x0, uAtraj, uBtraj):
+        xtraj = np.zeros([len(x0), len(uAtraj)+1])
+        xtraj[:,0] = x0
+        xcurr = x0
+        for i in range(len(uAtraj)):
+            xnext, _ = self.transition_helper(xcurr, uAtraj[i], uBtraj[i])
+            xtraj[:,i+1] = np.array(xnext)
+            xcurr = xnext
+        return xtraj  
 
     def get_reward_of_traj(self, x0, uAtraj, uBtraj, agentID="A"):
         xcurr = x0
@@ -481,7 +568,6 @@ class MultiAgentMDP(object):
         x_prime, _ = self.transition_helper(x, aA, aB)
 
         d_to_goalA = -np.linalg.norm(np.array([x_prime[0] - self.gA[0], x_prime[1] - self.gA[1]]), ord=2)**2
-        # d_coll = np.linalg.norm(np.array([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]]), ord=2)**2
 
         x_diff = np.abs([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]])
         reward_coll = self.coll_signed_dist[int(x_diff[0]), int(x_diff[1])]       
@@ -505,7 +591,6 @@ class MultiAgentMDP(object):
         x_prime, _ = self.transition_helper(x, aA, aB)
 
         d_to_goalB = -np.linalg.norm(np.array([x_prime[2] - self.gB[0], x_prime[3] - self.gB[1]]), ord=2)**2
-        # d_coll = np.linalg.norm(np.array([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]]), ord=2)**2
 
         x_diff = np.abs([x_prime[0] - x_prime[2], x_prime[1] - x_prime[3]])
         reward_coll = self.coll_signed_dist[int(x_diff[0]), int(x_diff[1])]    
@@ -643,6 +728,13 @@ class MultiAgentMDP(object):
         plt.scatter(xtraj[2,0], xtraj[3,0], c="blue", marker="o", s=100)
         plt.scatter(self.gA[0], self.gA[1], c="red", marker="x", s=300)
         plt.scatter(self.gB[0], self.gB[1], c="blue", marker="x", s=300)
+
+        # Plot the collision radius centered around agent A
+        ax = plt.gca()
+        coll_rad_circle = plt.Circle((xtraj[0,0], xtraj[1,0]), 
+                                    self.coll_rad, color='r', 
+                                    fill=False, linestyle='--')
+        ax.add_patch(coll_rad_circle)
 
         plt.plot(xtraj[0,:], xtraj[1,:], 'r-o')
         plt.plot(xtraj[2,:], xtraj[3,:], 'b-o')
