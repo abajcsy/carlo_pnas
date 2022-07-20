@@ -27,7 +27,7 @@ class MultiAgentMDP(object):
     """
     SingleAgentActions = SingleAgentActions
 
-    def __init__(self, XA, YA, XB, YB, startA, startB, goalA, goalB, obstacles):
+    def __init__(self, XA, YA, XB, YB, startA, startB, goalA, goalB, obstacles, static_obstacles):
         """
         Params:
             XA [int] -- agent A x-positions (the width of this gridworld).
@@ -39,6 +39,9 @@ class MultiAgentMDP(object):
             goalA [tuple] -- Goal position for agent A specified in coords (gx, gy).
             goalB [tuple] -- Goal position for agent B specified in coords (gx, gy).
             obstacles [list] -- List of axis-aligned 2D boxes that represent
+                obstacles in the environment for the agent. Specified in coords:
+                [[(lower_x, lower_y), (upper_x, upper_y)], [...]]
+            static_obstacles [list] -- List of axis-aligned 2D boxes that represent
                 obstacles in the environment for the agent. Specified in coords:
                 [[(lower_x, lower_y), (upper_x, upper_y)], [...]]
         """
@@ -71,6 +74,10 @@ class MultiAgentMDP(object):
 
         # Set the obstacles in the environment.
         self.obstacles = obstacles
+        self.static_obstacles = static_obstacles
+        self.static_obstacles_table = np.zeros((XA,YA))
+        for item in range(len(static_obstacles)):
+            self.static_obstacles_table[static_obstacles[item][0], static_obstacles[item][1]] = 1
 
         # design cost for collision as a "bump" distance function.
         self.coll_rad = 1.5
@@ -574,8 +581,9 @@ class MultiAgentMDP(object):
 
         alpha1 = 5.0  
         alpha2 = 100.0    # agent A's weight on collision cost.
+        alpha3 = 1e4      # agent A's weight on colliding against the obstacles
 
-        return alpha1 * d_to_goalA + alpha2 * reward_coll
+        return alpha1 * d_to_goalA + alpha2 * reward_coll + alpha3 * self.static_obstacles_table[x[0],x[1]]
 
     def get_rewardB(self, x, aA, aB):
         """
@@ -597,8 +605,9 @@ class MultiAgentMDP(object):
 
         beta1 = 5.0 
         beta2 = 100.0 # agent B's weight on collision cost. 
+        beta3 = 1e4     # agent B's weight on colliding against the obstacles
 
-        return beta1 * d_to_goalB + beta2 * reward_coll
+        return beta1 * d_to_goalB + beta2 * reward_coll + beta3 * self.static_obstacles_table[x[0],x[1]]
     
     def is_blocked(self, s):
         """
@@ -692,6 +701,11 @@ class MultiAgentMDP(object):
         plt.scatter(x[2], x[3], c="blue", marker="o", s=100)
         plt.scatter(self.gA[0], self.gA[1], c="red", marker="x", s=300)
         plt.scatter(self.gB[0], self.gB[1], c="blue", marker="x", s=300)
+        
+        # Plot the static obstacles
+        for item in range(len(self.static_obstacles)):
+            plt.scatter(self.static_obstacles[item][0], self.static_obstacles[item][1],
+                c='black', marker = "s", s = 200)
 
         plt.xticks(range(self.XA), range(self.XA))
         plt.yticks(np.arange(0,self.YA),range(self.YA))
@@ -728,6 +742,11 @@ class MultiAgentMDP(object):
         plt.scatter(xtraj[2,0], xtraj[3,0], c="blue", marker="o", s=100)
         plt.scatter(self.gA[0], self.gA[1], c="red", marker="x", s=300)
         plt.scatter(self.gB[0], self.gB[1], c="blue", marker="x", s=300)
+        
+        # Plot the static obstacles
+        for item in range(len(self.static_obstacles)):
+            plt.scatter(self.static_obstacles[item][0], self.static_obstacles[item][1],
+                c='black', marker = "s", s = 200)
 
         # Plot the collision radius centered around agent A
         ax = plt.gca()
