@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import skfmm
 import seaborn as sns
-import nashpy as nash
+# import nashpy as nash
 import time
 
 import itertools 
@@ -27,7 +27,7 @@ class MultiAgentMDP(object):
     """
     SingleAgentActions = SingleAgentActions
 
-    def __init__(self, XA, YA, XB, YB, startA, startB, goalA, goalB, obstacles, static_obstacles):
+    def __init__(self, XA, YA, XB, YB, startA, startB, goalA, goalB, obstacles, static_obstacles, coll_rad=1):
         """
         Params:
             XA [int] -- agent A x-positions (the width of this gridworld).
@@ -77,10 +77,10 @@ class MultiAgentMDP(object):
         self.static_obstacles = static_obstacles
         self.static_obstacles_table = np.zeros((XA,YA))
         for item in range(len(static_obstacles)):
-            self.static_obstacles_table[static_obstacles[item][0], static_obstacles[item][1]] = 1
+            self.static_obstacles_table[static_obstacles[item][0], static_obstacles[item][1]] = -1
 
         # design cost for collision as a "bump" distance function.
-        self.coll_rad = 1.5
+        self.coll_rad = coll_rad
         phi = np.ones([self.XA, self.YA])
         for x in range(self.XA):
             for y in range(self.YA):
@@ -119,6 +119,8 @@ class MultiAgentMDP(object):
             xtraj, uAtraj, uBtraj = self.fb_nash_solve(x0, hor)
         elif game_type == "OLSB":
             xtraj, uAtraj, uBtraj = self.ol_stackelberg_solve(x0, hor)
+        elif game_type == "FBSB":
+            xtraj, uAtraj, uBtraj = self.fb_stackelberg_solve(x0, hor)
         else:
             raise BaseException("undefined game type for {}".format(game_type))
 
@@ -331,8 +333,7 @@ class MultiAgentMDP(object):
             all_uBopts = np.array(all_uBopts)
             if len(all_uBopts.flatten()) > 1:
                 print("[OL-SB] Multiple solutions for uBtraj*(x0, uAtraj)! Num solns: ", len(all_uBopts.flatten()))
-                import pdb;
-                pdb.set_trace()
+                uBidx_opt = all_uBopts.flatten()[-1]
             # ========= DEBUGGING ========= #
             uBtraj_opt = all_action_seq[uBidx_opt]
             reward_traj = self.get_reward_of_traj(x0, uAtraj, uBtraj_opt, agentID="A")
@@ -352,12 +353,11 @@ class MultiAgentMDP(object):
         all_uAopts = np.array(all_uAopts)
         if len(all_uAopts.flatten()) > 1:
             print("[OL-SB] Multiple solutions for uAtraj*(x0)! Num solns: ", len(all_uAopts.flatten()))
-            import pdb;
-            pdb.set_trace()
         # ========= DEBUGGING ========= #
         uAtraj_opt = all_action_seq[uAidx_opt]
         # get the optimal response from agent B:
         uBidx_opt = np.argmax(QB[uAidx_opt, :])
+        uBidx_opt = all_uBopts.flatten()[-1]
         uBtraj_opt = all_action_seq[uBidx_opt]
 
         # generate the state trajectory by forward simulation:
@@ -376,7 +376,6 @@ class MultiAgentMDP(object):
 
         # compute the value functions for agent A and B
         print('Solving feedback Stackelberg game...')
-        import pdb
         for t in range(hor-1, -1, -1):
             print('---> ', t, ' backups remaining ...')
             for s in range(self.S):
@@ -559,7 +558,7 @@ class MultiAgentMDP(object):
             xB_prime = xB # "reset" the state if you went out of bounds. 
             yB_prime = yB
 
-        return [xA_prime, yA_prime, xB_prime, yB_prime], illegal
+        return [int(xA_prime), int(yA_prime), int(xB_prime), int(yB_prime)], illegal
 
     def get_rewardA(self, x, aA, aB):
         """
@@ -583,7 +582,7 @@ class MultiAgentMDP(object):
         alpha2 = 100.0    # agent A's weight on collision cost.
         alpha3 = 1e4      # agent A's weight on colliding against the obstacles
 
-        return alpha1 * d_to_goalA + alpha2 * reward_coll + alpha3 * self.static_obstacles_table[x[0],x[1]]
+        return alpha1 * d_to_goalA + alpha2 * reward_coll + alpha3 * self.static_obstacles_table[x_prime[0],x_prime[1]]
 
     def get_rewardB(self, x, aA, aB):
         """
@@ -607,7 +606,7 @@ class MultiAgentMDP(object):
         beta2 = 100.0 # agent B's weight on collision cost. 
         beta3 = 1e4     # agent B's weight on colliding against the obstacles
 
-        return beta1 * d_to_goalB + beta2 * reward_coll + beta3 * self.static_obstacles_table[x[2],x[3]]
+        return beta1 * d_to_goalB + beta2 * reward_coll + beta3 * self.static_obstacles_table[x_prime[2],x_prime[3]]
     
     def is_blocked(self, s):
         """
