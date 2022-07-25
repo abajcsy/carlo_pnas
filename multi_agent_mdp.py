@@ -18,6 +18,7 @@ class SingleAgentActions(IntEnum):
     DOWN = 1
     LEFT = 2
     RIGHT = 3
+    STAY = 4
 
 class MultiAgentMDP(object):
     """
@@ -27,7 +28,7 @@ class MultiAgentMDP(object):
     """
     SingleAgentActions = SingleAgentActions
 
-    def __init__(self, XA, YA, XB, YB, startA, startB, goalA, goalB, obstacles, static_obstacles, coll_rad=1):
+    def __init__(self, XA, YA, XB, YB, startA, startB, goalA, goalB, obstacles, static_obstacles=[], coll_rad=1):
         """
         Params:
             XA [int] -- agent A x-positions (the width of this gridworld).
@@ -534,6 +535,8 @@ class MultiAgentMDP(object):
             yA_prime = yA + 1
         elif aA == SingleAgentActions.UP:
             yA_prime = yA - 1
+        elif aA == SingleAgentActions.STAY:
+            pass
         else:
             raise BaseException("undefined action for agent A {}".format(aA))
 
@@ -545,6 +548,8 @@ class MultiAgentMDP(object):
             yB_prime = yB + 1
         elif aB == SingleAgentActions.UP:
             yB_prime = yB - 1
+        elif aB == SingleAgentActions.STAY:
+            pass
         else:
             raise BaseException("undefined action for agent B {}".format(aB))
 
