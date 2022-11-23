@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import skfmm
 import seaborn as sns
-import nashpy as nash
+# import nashpy as nash
 import time
 
 import itertools 
@@ -18,6 +18,7 @@ class SingleAgentActions(IntEnum):
     DOWN = 1
     LEFT = 2
     RIGHT = 3
+    STAY = 4
 
 class MultiAgentMDP(object):
     """
@@ -27,7 +28,7 @@ class MultiAgentMDP(object):
     """
     SingleAgentActions = SingleAgentActions
 
-    def __init__(self, XA, YA, XB, YB, startA, startB, goalA, goalB, obstacles):
+    def __init__(self, XA, YA, XB, YB, startA, startB, goalA, goalB, obstacles, static_obstacles=[], coll_rad=1):
         """
         Params:
             XA [int] -- agent A x-positions (the width of this gridworld).
@@ -39,6 +40,9 @@ class MultiAgentMDP(object):
             goalA [tuple] -- Goal position for agent A specified in coords (gx, gy).
             goalB [tuple] -- Goal position for agent B specified in coords (gx, gy).
             obstacles [list] -- List of axis-aligned 2D boxes that represent
+                obstacles in the environment for the agent. Specified in coords:
+                [[(lower_x, lower_y), (upper_x, upper_y)], [...]]
+            static_obstacles [list] -- List of axis-aligned 2D boxes that represent
                 obstacles in the environment for the agent. Specified in coords:
                 [[(lower_x, lower_y), (upper_x, upper_y)], [...]]
         """
@@ -71,9 +75,13 @@ class MultiAgentMDP(object):
 
         # Set the obstacles in the environment.
         self.obstacles = obstacles
+        self.static_obstacles = static_obstacles
+        self.static_obstacles_table = np.zeros((XA,YA))
+        for item in range(len(static_obstacles)):
+            self.static_obstacles_table[static_obstacles[item][0], static_obstacles[item][1]] = -1
 
         # design cost for collision as a "bump" distance function.
-        self.coll_rad = 1.5
+        self.coll_rad = coll_rad
         phi = np.ones([self.XA, self.YA])
         for x in range(self.XA):
             for y in range(self.YA):
@@ -112,6 +120,8 @@ class MultiAgentMDP(object):
             xtraj, uAtraj, uBtraj = self.fb_nash_solve(x0, hor)
         elif game_type == "OLSB":
             xtraj, uAtraj, uBtraj = self.ol_stackelberg_solve(x0, hor)
+        elif game_type == "FBSB":
+            xtraj, uAtraj, uBtraj = self.fb_stackelberg_solve(x0, hor)
         else:
             raise BaseException("undefined game type for {}".format(game_type))
 
@@ -324,8 +334,7 @@ class MultiAgentMDP(object):
             all_uBopts = np.array(all_uBopts)
             if len(all_uBopts.flatten()) > 1:
                 print("[OL-SB] Multiple solutions for uBtraj*(x0, uAtraj)! Num solns: ", len(all_uBopts.flatten()))
-                import pdb;
-                pdb.set_trace()
+                uBidx_opt = all_uBopts.flatten()[-1]
             # ========= DEBUGGING ========= #
             uBtraj_opt = all_action_seq[uBidx_opt]
             reward_traj = self.get_reward_of_traj(x0, uAtraj, uBtraj_opt, agentID="A")
@@ -345,12 +354,11 @@ class MultiAgentMDP(object):
         all_uAopts = np.array(all_uAopts)
         if len(all_uAopts.flatten()) > 1:
             print("[OL-SB] Multiple solutions for uAtraj*(x0)! Num solns: ", len(all_uAopts.flatten()))
-            import pdb;
-            pdb.set_trace()
         # ========= DEBUGGING ========= #
         uAtraj_opt = all_action_seq[uAidx_opt]
         # get the optimal response from agent B:
         uBidx_opt = np.argmax(QB[uAidx_opt, :])
+        uBidx_opt = all_uBopts.flatten()[-1]
         uBtraj_opt = all_action_seq[uBidx_opt]
 
         # generate the state trajectory by forward simulation:
@@ -369,7 +377,6 @@ class MultiAgentMDP(object):
 
         # compute the value functions for agent A and B
         print('Solving feedback Stackelberg game...')
-        import pdb
         for t in range(hor-1, -1, -1):
             print('---> ', t, ' backups remaining ...')
             for s in range(self.S):
@@ -528,6 +535,8 @@ class MultiAgentMDP(object):
             yA_prime = yA + 1
         elif aA == SingleAgentActions.UP:
             yA_prime = yA - 1
+        elif aA == SingleAgentActions.STAY:
+            pass
         else:
             raise BaseException("undefined action for agent A {}".format(aA))
 
@@ -539,6 +548,8 @@ class MultiAgentMDP(object):
             yB_prime = yB + 1
         elif aB == SingleAgentActions.UP:
             yB_prime = yB - 1
+        elif aB == SingleAgentActions.STAY:
+            pass
         else:
             raise BaseException("undefined action for agent B {}".format(aB))
 
@@ -552,7 +563,7 @@ class MultiAgentMDP(object):
             xB_prime = xB # "reset" the state if you went out of bounds. 
             yB_prime = yB
 
-        return [xA_prime, yA_prime, xB_prime, yB_prime], illegal
+        return [int(xA_prime), int(yA_prime), int(xB_prime), int(yB_prime)], illegal
 
     def get_rewardA(self, x, aA, aB):
         """
@@ -574,8 +585,9 @@ class MultiAgentMDP(object):
 
         alpha1 = 5.0  
         alpha2 = 100.0    # agent A's weight on collision cost.
+        alpha3 = 1e4      # agent A's weight on colliding against the obstacles
 
-        return alpha1 * d_to_goalA + alpha2 * reward_coll
+        return alpha1 * d_to_goalA + alpha2 * reward_coll + alpha3 * self.static_obstacles_table[x_prime[0],x_prime[1]]
 
     def get_rewardB(self, x, aA, aB):
         """
@@ -597,8 +609,9 @@ class MultiAgentMDP(object):
 
         beta1 = 5.0 
         beta2 = 100.0 # agent B's weight on collision cost. 
+        beta3 = 1e4     # agent B's weight on colliding against the obstacles
 
-        return beta1 * d_to_goalB + beta2 * reward_coll
+        return beta1 * d_to_goalB + beta2 * reward_coll + beta3 * self.static_obstacles_table[x_prime[2],x_prime[3]]
     
     def is_blocked(self, s):
         """
@@ -692,6 +705,11 @@ class MultiAgentMDP(object):
         plt.scatter(x[2], x[3], c="blue", marker="o", s=100)
         plt.scatter(self.gA[0], self.gA[1], c="red", marker="x", s=300)
         plt.scatter(self.gB[0], self.gB[1], c="blue", marker="x", s=300)
+        
+        # Plot the static obstacles
+        for item in range(len(self.static_obstacles)):
+            plt.scatter(self.static_obstacles[item][0], self.static_obstacles[item][1],
+                c='black', marker = "s", s = 400)
 
         plt.xticks(range(self.XA), range(self.XA))
         plt.yticks(np.arange(0,self.YA),range(self.YA))
@@ -728,6 +746,11 @@ class MultiAgentMDP(object):
         plt.scatter(xtraj[2,0], xtraj[3,0], c="blue", marker="o", s=100)
         plt.scatter(self.gA[0], self.gA[1], c="red", marker="x", s=300)
         plt.scatter(self.gB[0], self.gB[1], c="blue", marker="x", s=300)
+        
+        # Plot the static obstacles
+        for item in range(len(self.static_obstacles)):
+            plt.scatter(self.static_obstacles[item][0], self.static_obstacles[item][1],
+                c='black', marker = "s", s = 400)
 
         # Plot the collision radius centered around agent A
         ax = plt.gca()
