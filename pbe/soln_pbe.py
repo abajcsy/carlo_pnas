@@ -234,14 +234,14 @@ for tau in np.flip(range(10)):
     pi_1[tau] = pi_1_t
     pi_2[tau] = pi_2_t
     end = time.time()
-    print(f"Time for iteration {t}: {end-start:.2f}s")
+    print(f"Time for iteration {tau}: {end-start:.2f}s")
 
 # Save data
-with open(f"V_1.pkl", "wb") as f:
+with open(f"data/{args.env}/V_1.pkl", "wb") as f:
     pickle.dump(V_1, f)
-with open(f"V_2.pkl", "wb") as f:
+with open(f"data/{args.env}/V_2.pkl", "wb") as f:
     pickle.dump(V_2_t, f)
-with open(f"pi_1.pkl", "wb") as f:
+with open(f"data/{args.env}/pi_1.pkl", "wb") as f:
     pickle.dump(pi_1, f)
-with open(f"pi_2.pkl", "wb") as f:
+with open(f"data/{args.env}/pi_2.pkl", "wb") as f:
     pickle.dump(pi_2, f)
