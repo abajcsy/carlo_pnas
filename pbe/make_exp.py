@@ -11,6 +11,10 @@ def decompose_dim(x, dim):
 def vec(*kwargs):
     return np.array([list(kwargs)]).T
 
+def project_belief(b, beliefs):
+    # Project belief onto belief space
+    return beliefs[np.argmin([np.linalg.norm(b-b1) for b1 in beliefs])]
+
 def make_1d_exp(x_max=10, b_num=10):
     def dynamics(x,u1,u2):
         u = combine(u1,u2)
@@ -33,7 +37,7 @@ def make_1d_exp(x_max=10, b_num=10):
         if theta == 1: # Go to other agent
             return -np.linalg.norm(x1-x2) - np.linalg.norm(u2)
         else: # Go to goal
-            return -np.linalg.norm(x1-goal) - np.linalg.norm(u2)
+            return -np.linalg.norm(x2-goal) - np.linalg.norm(u2)
         
     # Setup states, actions, types
     states = []
@@ -82,7 +86,7 @@ def make_2d_exp(x_max=2, y_max=2, b_num=2):
         if theta == 1: # Go to other agent
             return -np.linalg.norm(x1-x2) - np.linalg.norm(u2)
         else: # Go to goal
-            return -np.linalg.norm(x1-goal) - np.linalg.norm(u2)
+            return -np.linalg.norm(x2-goal) - np.linalg.norm(u2)
         
     # Setup states, actions, types
     states = []
@@ -108,3 +112,4 @@ def make_2d_exp(x_max=2, y_max=2, b_num=2):
     types = [1,2]
 
     return states, actions, types, dynamics, r1, r2, beliefs
+

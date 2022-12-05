@@ -7,7 +7,7 @@ from make_exp import *
 import argparse
 
 # Setup arg parser
-# Example: python3 soln_pbe.py --env 1d --size 7 --beliefs 10
+# Example: python3 soln_pbe.py --env 1d --size 5 --beliefs 11
 parser = argparse.ArgumentParser()
 parser.add_argument('--env', type=str, default="1d")
 parser.add_argument('--size', type=int, default=5)
@@ -75,13 +75,14 @@ def calc_v_next(u1,u2,v_nexts,state,strat1,strat2,t):
 def arr_tup(x):
     return tuple(x.flatten())
 
-# Setup value function and policy dictionaries
-
-T = 10 # horizon
 def make_state_type_list():
     return {(arr_tup(state),t):None for state in states for t in types}
 def make_state_list():
     return {(arr_tup(state)):None for state in states}
+
+# Setup value function and policy dictionaries
+
+T = 10 # horizon
 
 # Terminal state
 V_1 = {} # value functions: [t][(state,type)] = value
@@ -114,19 +115,19 @@ def compute_state(state, tau, V_1_t, V_2_t, pi_1_t, pi_2_t, V_1_next, V_2_next):
             for i2 in range(len(strats2)):
                 s1, s2 = strats1[i1], strats2[i2]
                 if t1 == 1:
-                    p1 = b11/(b11+b12)
-                    if np.isnan(p1):
+                    if b11+b12 == 0:
                         u1 = -np.inf
                     else:
+                        p1 = b11/(b11+b12)
                         p2 = 1 - p1
                         v1 = calc_v_next(s1[1], s2[1],V_1_next, state, s1, s2, t1)
                         v2 = calc_v_next(s1[1], s2[2],V_1_next, state, s1, s2, t1)
                         u1 = p1*(r1(state,s1[1],s2[1],1)+ v1) + p2*(r1(state,s1[1],s2[2],1) + v2)
                 else:
-                    p1 = b21/(b21+b22)
-                    if np.isnan(p1):
+                    if b21+b22 == 0:
                         u1 = -np.inf
                     else:
+                        p1 = b21/(b21+b22)
                         p2 = 1-p1
                         v1 = calc_v_next(s1[2], s2[1],V_1_next, state, s1, s2, t1)
                         v2 = calc_v_next(s1[2], s2[2],V_1_next, state, s1, s2, t1)
@@ -137,19 +138,19 @@ def compute_state(state, tau, V_1_t, V_2_t, pi_1_t, pi_2_t, V_1_next, V_2_next):
             for i2 in range(len(strats2)):
                 s1, s2 = strats1[i1], strats2[i2]
                 if t2 == 1:
-                    p1 = b11/(b12+b22)
-                    if np.isnan(p1):
+                    if b12+b22 == 0:
                         u2 = -np.inf
                     else:
+                        p1 = b11/(b12+b22)
                         p2 = 1 - p1
                         v1 = calc_v_next(s1[1], s2[1],V_2_next, state, s1, s2, t2)
                         v2 = calc_v_next(s1[2], s2[1],V_2_next, state, s1, s2, t2)
                         u2 = p1*(r2(state,s1[1],s2[1],1)+v1) + p2*(r2(state,s1[2],s2[1],1)+v2)
                 else:
-                    p1 = b12/(b12+b22)
-                    if np.isnan(p1):
+                    if b12+b22 == 0:
                         u2 = -np.inf
                     else:
+                        p1 = b12/(b12+b22)
                         p2 = 1 - p1
                         v1 = calc_v_next(s1[1], s2[2],V_2_next, state, s1, s2, t2)
                         v2 = calc_v_next(s1[2], s2[2],V_2_next, state, s1, s2, t2)
@@ -186,26 +187,24 @@ def compute_state(state, tau, V_1_t, V_2_t, pi_1_t, pi_2_t, V_1_next, V_2_next):
     
     # Equilibrium selection
     if len(eqs) == 0:
-        print("No equilibrium found at state", state, "at time", t)
+        print("No pure equilibrium found at state", state, "at time", tau)
         for t in types:
-            V_1_t[(arr_tup(state),t)] = -1000
-            V_2_t[(arr_tup(state),t)] = -1000
+            V_1_t[(arr_tup(state),t)] = -1e6
+            V_2_t[(arr_tup(state),t)] = -1e6
             pi_1_t[arr_tup(state)] = None
             pi_2_t[arr_tup(state)] = None
-    elif len(eqs) == 1:
-        eq = eqs[0]
     else:
         eq = eqs[0]
     
-    pi_1_t[arr_tup(state)] = eq[0]
-    pi_2_t[arr_tup(state)] = eq[1]
+        pi_1_t[arr_tup(state)] = strats1[eq[0]]
+        pi_2_t[arr_tup(state)] = strats2[eq[1]]
 
-    # Calculate value of state
-    for t in types:
-        V_1_t[(arr_tup(state),t)] = us1[t][eq]
-        V_2_t[(arr_tup(state),t)] = us2[t][eq]
+        # Calculate value of state
+        for t in types:
+            V_1_t[(arr_tup(state),t)] = us1[t][eq]
+            V_2_t[(arr_tup(state),t)] = us2[t][eq]
 
-    print("Time elapsed for single state:", time.time()-start_i)
+    # print("Time elapsed for single state:", time.time()-start_i)
 
 # Run PBE computation
 for tau in np.flip(range(10)):
@@ -237,11 +236,13 @@ for tau in np.flip(range(10)):
     print(f"Time for iteration {tau}: {end-start:.2f}s")
 
 # Save data
-with open(f"data/{args.env}/V_1.pkl", "wb") as f:
+multi = "multi" if multi else "single"
+file_name = str(args.env) + "_" + multi + "_" + str(args.size) + "_" + str(args.beliefs) + ".pkl"
+with open(f"data/{args.env}/V_1_"+file_name, "wb") as f:
     pickle.dump(V_1, f)
-with open(f"data/{args.env}/V_2.pkl", "wb") as f:
-    pickle.dump(V_2_t, f)
-with open(f"data/{args.env}/pi_1.pkl", "wb") as f:
+with open(f"data/{args.env}/V_2_"+file_name, "wb") as f:
+    pickle.dump(V_2, f)
+with open(f"data/{args.env}/pi_1_"+file_name, "wb") as f:
     pickle.dump(pi_1, f)
-with open(f"data/{args.env}/pi_2.pkl", "wb") as f:
+with open(f"data/{args.env}/pi_2_"+file_name, "wb") as f:
     pickle.dump(pi_2, f)
